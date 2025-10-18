@@ -13,37 +13,34 @@ app.get("/", (_, res) => {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Offline Site Saver 🔒</title>
 <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
 <style>
 body {
   font-family: system-ui, sans-serif;
-  background: #f8fafc;
+  background: #f9fafb;
   color: #111;
-  margin: 0;
   display: flex;
   justify-content: center;
-  align-items: start;
-  min-height: 100vh;
   padding: 2rem;
 }
 .app {
   background: white;
   border-radius: 1rem;
-  box-shadow: 0 0 20px rgba(0,0,0,0.05);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
   padding: 2rem;
   width: 100%;
   max-width: 600px;
 }
-h1 { margin-top: 0; font-size: 1.5rem; text-align: center; }
+h1 { text-align: center; margin-top: 0; }
 input, button, select {
   width: 100%;
   padding: 0.75rem;
+  margin-top: 0.5rem;
   font-size: 1rem;
   border-radius: 0.5rem;
   border: 1px solid #ccc;
-  margin-top: 0.5rem;
 }
 button {
   cursor: pointer;
@@ -51,7 +48,7 @@ button {
   color: white;
   font-weight: 600;
   border: none;
-  transition: background 0.2s;
+  transition: 0.2s;
 }
 button:hover { background: #1d4ed8; }
 iframe {
@@ -61,24 +58,17 @@ iframe {
   border-radius: 0.5rem;
   margin-top: 1rem;
 }
-.notice {
-  font-size: 0.875rem;
-  color: #555;
-  margin-top: 1rem;
-}
 </style>
 </head>
 <body>
 <div class="app">
   <h1>Offline Site Saver 🔒</h1>
-  <input id="urlInput" placeholder="Enter a website URL">
-  <input type="password" id="passInput" placeholder="Enter a passphrase">
+  <input id="urlInput" placeholder="Enter website URL">
+  <input type="password" id="passInput" placeholder="Enter passphrase">
   <button onclick="saveSite()">💾 Save Site</button>
-  <button onclick="downloadFile()">⬇️ Download Offline File</button>
-
+  <button onclick="downloadFile()">⬇️ Download Offline HTML</button>
   <select id="siteSelect" onchange="viewSite()"></select>
   <iframe id="viewer" title="Offline Viewer"></iframe>
-  <p class="notice">Sites are saved locally in your browser. Media (images/videos) are encrypted with your passphrase.</p>
 </div>
 
 <script>
@@ -116,8 +106,8 @@ async function saveSite() {
     const assets = {};
     for (const aurl of assetUrls) {
       const blob = await (await fetch("/proxy?url=" + encodeURIComponent(aurl))).blob();
-      const arrayBuffer = await blob.arrayBuffer();
-      const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
+      const buffer = await blob.arrayBuffer();
+      const wordArray = CryptoJS.lib.WordArray.create(buffer);
       assets[aurl] = CryptoJS.AES.encrypt(wordArray, pass).toString();
     }
 
@@ -137,15 +127,21 @@ function viewSite() {
   if (!pass) return alert("Enter your passphrase to decrypt media.");
 
   const { html, assets } = sites[url];
+  if (!html) return alert("No saved data found.");
+
   const viewer = document.getElementById("viewer");
 
   let out = html.replace(/(src)="([^"]+)"/g, (m, attr, u) => {
     const abs = new URL(u, url).href;
     if (assets[abs]) {
-      const bytes = CryptoJS.AES.decrypt(assets[abs], pass);
-      const buf = new Uint8Array(bytes.words.flatMap(w => [(w >>> 24) & 0xFF, (w >>> 16) & 0xFF, (w >>> 8) & 0xFF, w & 0xFF]));
-      const blobUrl = URL.createObjectURL(new Blob([buf]));
-      return attr + '="' + blobUrl + '"';
+      try {
+        const bytes = CryptoJS.AES.decrypt(assets[abs], pass);
+        const buf = new Uint8Array(bytes.words.flatMap(w => [(w>>>24)&255,(w>>>16)&255,(w>>>8)&255,w&255]));
+        const blobUrl = URL.createObjectURL(new Blob([buf]));
+        return attr + '="' + blobUrl + '"';
+      } catch {
+        console.log("Decrypt failed:", u);
+      }
     }
     return m;
   });
@@ -155,19 +151,59 @@ function viewSite() {
 }
 
 function downloadFile() {
-  const blob = new Blob([JSON.stringify(sites)], { type: "application/json" });
+  const pass = document.getElementById("passInput").value.trim();
+  if (!pass) return alert("Enter your passphrase before downloading.");
+
+  const html = \`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Offline Encrypted Sites</title>
+<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+<style>
+body{font-family:sans-serif;text-align:center;padding:20px;}
+input,select{padding:10px;margin:5px;}
+iframe{width:90%;height:500px;border:1px solid #ccc;margin-top:10px;}
+</style></head><body>
+<h2>Offline Encrypted Sites</h2>
+<input type="password" id="passInput" placeholder="Enter passphrase">
+<select id="siteSelect"></select>
+<iframe id="viewer"></iframe>
+<script>
+const sites = \${JSON.stringify(sites).replace(/</g,"\\\\u003c")};
+const sel=document.getElementById('siteSelect');
+Object.keys(sites).forEach(u=>{
+ const o=document.createElement('option');
+ o.value=u; o.textContent=u; sel.appendChild(o);
+});
+sel.onchange=()=>{
+ const pass=document.getElementById('passInput').value;
+ if(!pass){alert('Enter passphrase');return;}
+ const {html,assets}=sites[sel.value];
+ let out=html.replace(/(src)="([^"]+)"/g,(m,a,u)=>{
+   const abs=new URL(u,sel.value).href;
+   if(assets[abs]){
+     const b=CryptoJS.AES.decrypt(assets[abs],pass);
+     const buf=new Uint8Array(b.words.flatMap(w=>[(w>>>24)&255,(w>>>16)&255,(w>>>8)&255,w&255]));
+     const blobUrl=URL.createObjectURL(new Blob([buf]));
+     return a+'="'+blobUrl+'"';
+   }
+   return m;
+ });
+ const blob=new Blob([out],{type:'text/html'});
+ viewer.src=URL.createObjectURL(blob);
+};
+</script></body></html>\`;
+
+  const blob = new Blob([html], { type: "text/html" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "offline-sites.json";
+  a.download = "offline-sites.html";
   a.click();
-  alert("💾 Downloaded your saved sites file!");
+  alert("💾 Downloaded one self-contained HTML file!");
 }
 </script>
 </body>
 </html>`);
 });
 
-// Backend routes
 app.post("/fetch", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).send("Missing URL");
@@ -185,8 +221,8 @@ app.get("/proxy", async (req, res) => {
   try {
     const r = await axios.get(url, { responseType: "arraybuffer" });
     res.send(Buffer.from(r.data));
-  } catch (e) {
-    res.status(500).send("Failed to fetch asset.");
+  } catch {
+    res.status(500).send("Failed to fetch asset");
   }
 });
 
