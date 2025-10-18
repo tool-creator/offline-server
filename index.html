@@ -82,21 +82,57 @@ function viewSite(){
 function downloadFile(){
   const pass=document.getElementById("passInput").value.trim();
   if(!pass)return alert("Enter passphrase");
-  let html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline Sites</title><script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>';
-  html+='<style>body{font-family:sans-serif;text-align:center;padding:20px;} input,select{padding:10px;margin:5px;} iframe{width:90%;height:500px;border:1px solid #ccc;margin-top:10px;}</style></head><body>';
-  html+='<h2>Offline Encrypted Sites</h2><input type="password" id="passInput" placeholder="Enter passphrase"><select id="siteSelect"></select><iframe id="viewer"></iframe>';
-  html+='<script>';
-  html+='const sites='+JSON.stringify(sites).replace(/</g,"\\u003c")+';';
-  html+='const sel=document.getElementById("siteSelect");Object.keys(sites).forEach(u=>{const o=document.createElement("option");o.value=u;o.textContent=u;sel.appendChild(o);});';
-  html+='sel.onchange=()=>{const pass=document.getElementById("passInput").value;if(!pass){alert("Enter passphrase");return;}const {html,assets}=sites[sel.value];';
-  html+='let out=html.replace(/(src)="([^"]+)"/g,(m,a,u)=>{const abs=new URL(u,sel.value).href;if(assets[abs]){const b=CryptoJS.AES.decrypt(assets[abs],pass);const buf=new Uint8Array(b.words.flatMap(w=>[(w>>>24)&255,(w>>>16)&255,(w>>>8)&255,w&255]));return a+"="+URL.createObjectURL(new Blob([buf]));}return m;});';
-  html+='document.getElementById("viewer").src=URL.createObjectURL(new Blob([out],{type:"text/html"}));};';
-  html+='</script></body></html>';
-
-  const blob=new Blob([html],{type:"text/html"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="offline-sites.html";a.click();
+  const offlineHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Offline Sites</title>
+<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+<style>
+body{font-family:sans-serif;text-align:center;padding:20px;}
+input,select{padding:10px;margin:5px;}
+iframe{width:90%;height:500px;border:1px solid #ccc;margin-top:10px;}
+</style>
+</head>
+<body>
+<h2>Offline Encrypted Sites</h2>
+<input type="password" id="passInput" placeholder="Enter passphrase">
+<select id="siteSelect"></select>
+<iframe id="viewer"></iframe>
+<script>
+const sites = ${JSON.stringify(sites).replace(/</g,"\\u003c")};
+const sel=document.getElementById("siteSelect");
+Object.keys(sites).forEach(u=>{
+  const o=document.createElement("option");o.value=u;o.textContent=u;sel.appendChild(o);
+});
+sel.onchange=()=>{
+  const pass=document.getElementById("passInput").value;
+  if(!pass){alert("Enter passphrase");return;}
+  const {html,assets}=sites[sel.value];
+  let out=html.replace(/(src)="([^"]+)"/g,(m,a,u)=>{
+    const abs=new URL(u,sel.value).href;
+    if(assets[abs]){
+      const b=CryptoJS.AES.decrypt(assets[abs],pass);
+      const buf=new Uint8Array(b.words.flatMap(w=>[(w>>>24)&255,(w>>>16)&255,(w>>>8)&255,w&255]));
+      return a+'="'+URL.createObjectURL(new Blob([buf]))+'"';
+    }
+    return m;
+  });
+  document.getElementById("viewer").src=URL.createObjectURL(new Blob([out],{type:"text/html"}));
+};
+</script>
+</body>
+</html>`;
+  const blob=new Blob([offlineHtml],{type:"text/html"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="offline-sites.html";
+  a.click();
   alert("💾 Downloaded offline HTML!");
 }
 </script>
 </body>
 </html>
+`;
+}
