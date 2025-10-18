@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Offline Site Saver 🔒</title>
+<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+<style>
+body{font-family:sans-serif;text-align:center;padding:20px;}
+input,select,button{padding:10px;margin:5px;width:90%; max-width:500px;}
+iframe{width:90%;height:500px;border:1px solid #ccc;margin-top:10px;}
+button{cursor:pointer;background:#2563eb;color:white;border:none;border-radius:6px;}
+button:hover{background:#1d4ed8;}
+</style>
+</head>
+<body>
+<h1>Offline Site Saver 🔒</h1>
+<input id="urlInput" placeholder="Enter website URL">
+<input type="password" id="passInput" placeholder="Enter passphrase">
+<button onclick="saveSite()">💾 Save Site</button>
+<button onclick="downloadFile()">⬇️ Download Offline HTML</button>
+<select id="siteSelect" onchange="viewSite()"></select>
+<iframe id="viewer"></iframe>
+
+<script>
+let sites = JSON.parse(localStorage.getItem("offlineSites")||"{}");
+
+function refreshList(){
+  const sel = document.getElementById("siteSelect");
+  sel.innerHTML="<option value=''>📂 View Saved Site...</option>";
+  Object.keys(sites).forEach(url=>{
+    const o=document.createElement("option");
+    o.value=url;o.textContent=url;sel.appendChild(o);
+  });
+}
+refreshList();
+
+async function saveSite(){
+  const url=document.getElementById("urlInput").value.trim();
+  const pass=document.getElementById("passInput").value.trim();
+  if(!url||!pass)return alert("Enter URL & passphrase");
+  try{
+    const res = await fetch("/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
+    let html = await res.text();
+    const assets = {};
+    const assetUrls = [];
+    html.replace(/<img[^>]+src="([^">]+)"/g,(_,u)=>assetUrls.push(new URL(u,url).href));
+    html.replace(/<video[^>]+src="([^">]+)"/g,(_,u)=>assetUrls.push(new URL(u,url).href));
+
+    for(const aurl of assetUrls){
+      const blob = await (await fetch("/proxy?url="+encodeURIComponent(aurl))).blob();
+      const buffer = await blob.arrayBuffer();
+      const wordArray = CryptoJS.lib.WordArray.create(buffer);
+      assets[aurl] = CryptoJS.AES.encrypt(wordArray, pass).toString();
+    }
+    sites[url]={html,assets};
+    localStorage.setItem("offlineSites",JSON.stringify(sites));
+    refreshList();
+    alert("✅ Site saved!");
+  }catch(e){alert("❌ Failed: "+e.message);}
+}
+
+function viewSite(){
+  const url=document.getElementById("siteSelect").value;
+  const pass=document.getElementById("passInput").value.trim();
+  if(!url||!pass)return;
+  const {html,assets}=sites[url];
+  let out=html.replace(/(src)="([^"]+)"/g,(m,a,u)=>{
+    const abs=new URL(u,url).href;
+    if(assets[abs]){
+      try{
+        const b=CryptoJS.AES.decrypt(assets[abs],pass);
+        const buf=new Uint8Array(b.words.flatMap(w=>[(w>>>24)&255,(w>>>16)&255,(w>>>8)&255,w&255]));
+        return a+'="'+URL.createObjectURL(new Blob([buf]))+'"';
+      }catch{return m;}
+    }
+    return m;
+  });
+  document.getElementById("viewer").src=URL.createObjectURL(new Blob([out],{type:"text/html"}));
+}
+
+function downloadFile(){
+  const pass=document.getElementById("passInput").value.trim();
+  if(!pass)return alert("Enter passphrase");
+  let html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline Sites</title><script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>';
+  html+='<style>body{font-family:sans-serif;text-align:center;padding:20px;} input,select{padding:10px;margin:5px;} iframe{width:90%;height:500px;border:1px solid #ccc;margin-top:10px;}</style></head><body>';
+  html+='<h2>Offline Encrypted Sites</h2><input type="password" id="passInput" placeholder="Enter passphrase"><select id="siteSelect"></select><iframe id="viewer"></iframe>';
+  html+='<script>';
+  html+='const sites='+JSON.stringify(sites).replace(/</g,"\\u003c")+';';
+  html+='const sel=document.getElementById("siteSelect");Object.keys(sites).forEach(u=>{const o=document.createElement("option");o.value=u;o.textContent=u;sel.appendChild(o);});';
+  html+='sel.onchange=()=>{const pass=document.getElementById("passInput").value;if(!pass){alert("Enter passphrase");return;}const {html,assets}=sites[sel.value];';
+  html+='let out=html.replace(/(src)="([^"]+)"/g,(m,a,u)=>{const abs=new URL(u,sel.value).href;if(assets[abs]){const b=CryptoJS.AES.decrypt(assets[abs],pass);const buf=new Uint8Array(b.words.flatMap(w=>[(w>>>24)&255,(w>>>16)&255,(w>>>8)&255,w&255]));return a+"="+URL.createObjectURL(new Blob([buf]));}return m;});';
+  html+='document.getElementById("viewer").src=URL.createObjectURL(new Blob([out],{type:"text/html"}));};';
+  html+='</script></body></html>';
+
+  const blob=new Blob([html],{type:"text/html"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="offline-sites.html";a.click();
+  alert("💾 Downloaded offline HTML!");
+}
+</script>
+</body>
+</html>
