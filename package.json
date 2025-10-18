@@ -1,0 +1,17 @@
+{
+  "name": "offline-site-saver",
+  "version": "1.0.0",
+  "description": "Save websites offline with encrypted images/videos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["offline","website","saver","encrypted","media"]
+}
