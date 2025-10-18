@@ -6,52 +6,36 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static("."));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Serve the frontend
 app.get("/", (_, res) => {
   res.sendFile(new URL("./index.html", import.meta.url));
 });
 
-// POST /fetch - fetch HTML content from a website
+// Fetch HTML content
 app.post("/fetch", async (req, res) => {
   let { url } = req.body;
-  if (!url) return res.status(400).send("Missing URL");
-  
-  // Ensure URL has protocol
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    url = "https://" + url;
-  }
-
+  if (!url.startsWith("http")) url = "https://" + url;
   try {
-    const response = await axios.get(url, { timeout: 15000 }); // 15s timeout
-    res.send(response.data);
+    const r = await axios.get(url, { timeout: 15000 });
+    res.send(r.data);
   } catch (e) {
-    console.error("Error fetching HTML:", e.message);
-    res.status(500).send("Failed to fetch site HTML: " + e.message);
+    console.error("Fetch HTML error:", e.message);
+    res.status(500).send("Failed to fetch site HTML");
   }
 });
 
-// GET /proxy?url=... - fetch assets (images/videos) as arraybuffer
+// Fetch assets
 app.get("/proxy", async (req, res) => {
   let { url } = req.query;
-  if (!url) return res.status(400).send("Missing URL");
-
+  if (!url.startsWith("http")) url = "https://" + url;
   try {
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      url = "https://" + url;
-    }
-    const response = await axios.get(url, {
-      responseType: "arraybuffer",
-      timeout: 20000 // 20s for larger files
-    });
-    res.send(Buffer.from(response.data));
+    const r = await axios.get(url, { responseType: "arraybuffer", timeout: 20000 });
+    res.send(Buffer.from(r.data));
   } catch (e) {
-    console.error("Error fetching asset:", url, e.message);
-    res.status(500).send("Failed to fetch asset: " + e.message);
+    console.error("Proxy fetch error:", e.message);
+    res.status(500).send("Failed to fetch asset");
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Offline Site Saver server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
