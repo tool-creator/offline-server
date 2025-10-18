@@ -8,188 +8,186 @@ app.use(express.static("."));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve main page
 app.get("/", (_, res) => {
   res.send(`<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Offline Site Saver with Encrypted Media</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline Site Saver 🔒</title>
 <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
 <style>
-body { font-family:sans-serif; text-align:center; padding:20px; }
-input,button,select { padding:10px;margin:5px;font-size:16px; }
-iframe { width:90%; height:500px; border:1px solid #ccc; margin-top:10px; }
-.container { max-width:600px; margin:auto; }
+body {
+  font-family: system-ui, sans-serif;
+  background: #f8fafc;
+  color: #111;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  align-items: start;
+  min-height: 100vh;
+  padding: 2rem;
+}
+.app {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 0 20px rgba(0,0,0,0.05);
+  padding: 2rem;
+  width: 100%;
+  max-width: 600px;
+}
+h1 { margin-top: 0; font-size: 1.5rem; text-align: center; }
+input, button, select {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #ccc;
+  margin-top: 0.5rem;
+}
+button {
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  border: none;
+  transition: background 0.2s;
+}
+button:hover { background: #1d4ed8; }
+iframe {
+  width: 100%;
+  height: 500px;
+  border: 1px solid #ccc;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+}
+.notice {
+  font-size: 0.875rem;
+  color: #555;
+  margin-top: 1rem;
+}
 </style>
 </head>
 <body>
-<div class="container">
-<h1>🖼 Offline Site Saver (Encrypted Media)</h1>
-<input type="text" id="urlInput" placeholder="Enter website URL" style="width:70%">
-<input type="password" id="passInput" placeholder="Enter passphrase" style="width:70%">
-<br>
-<button onclick="saveSite()">Save Site</button>
-<button onclick="downloadFile()">Download Offline File</button>
-<div>
-<h3>Saved Sites</h3>
-<select id="siteSelect" onchange="viewSite()"></select>
-</div>
-<iframe id="viewer"></iframe>
+<div class="app">
+  <h1>Offline Site Saver 🔒</h1>
+  <input id="urlInput" placeholder="Enter a website URL">
+  <input type="password" id="passInput" placeholder="Enter a passphrase">
+  <button onclick="saveSite()">💾 Save Site</button>
+  <button onclick="downloadFile()">⬇️ Download Offline File</button>
+
+  <select id="siteSelect" onchange="viewSite()"></select>
+  <iframe id="viewer" title="Offline Viewer"></iframe>
+  <p class="notice">Sites are saved locally in your browser. Media (images/videos) are encrypted with your passphrase.</p>
 </div>
 
 <script>
-let sites = JSON.parse(localStorage.getItem('offlineSites')||'{}');
+let sites = JSON.parse(localStorage.getItem("offlineSites") || "{}");
+refreshList();
 
 function refreshList() {
-  const select=document.getElementById('siteSelect');
-  select.innerHTML='<option value="">--Choose site--</option>';
-  Object.keys(sites).forEach(url=>{
-    const opt=document.createElement('option');
-    opt.value=url; opt.textContent=url; select.appendChild(opt);
+  const select = document.getElementById("siteSelect");
+  select.innerHTML = "<option value=''>📂 View Saved Site...</option>";
+  Object.keys(sites).forEach(url => {
+    const opt = document.createElement("option");
+    opt.value = url;
+    opt.textContent = url;
+    select.appendChild(opt);
   });
 }
 
-// Fetch an asset and encrypt it
-async function fetchAsset(url, pass) {
-  try {
-    const res = await fetch('/proxy?url=' + encodeURIComponent(url));
-    const blob = await res.blob();
-    const arrayBuffer = await blob.arrayBuffer();
-    const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
-    return CryptoJS.AES.encrypt(wordArray, pass).toString();
-  } catch(e){ console.log("Asset failed:", url); return null; }
-}
-
-// Save site and encrypt media
 async function saveSite() {
-  const url=document.getElementById('urlInput').value.trim();
-  const pass=document.getElementById('passInput').value;
-  if(!url||!pass) return alert("Enter URL and passphrase");
-  try{
-    const res = await fetch('/fetch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+  const url = document.getElementById("urlInput").value.trim();
+  const pass = document.getElementById("passInput").value.trim();
+  if (!url || !pass) return alert("Please enter both URL and passphrase.");
+
+  try {
+    const res = await fetch("/fetch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
     let html = await res.text();
 
-    // Extract images and videos
     const assetUrls = [];
-    html.replace(/<img[^>]+src="([^">]+)"/g,(m,u)=>assetUrls.push(u));
-    html.replace(/<video[^>]+src="([^">]+)"/g,(m,u)=>assetUrls.push(u));
+    html.replace(/<img[^>]+src="([^">]+)"/g, (_, u) => assetUrls.push(new URL(u, url).href));
+    html.replace(/<video[^>]+src="([^">]+)"/g, (_, u) => assetUrls.push(new URL(u, url).href));
 
     const assets = {};
-    for(const aurl of assetUrls){
-      const encrypted = await fetchAsset(aurl, pass);
-      if(encrypted) assets[aurl] = encrypted;
+    for (const aurl of assetUrls) {
+      const blob = await (await fetch("/proxy?url=" + encodeURIComponent(aurl))).blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
+      assets[aurl] = CryptoJS.AES.encrypt(wordArray, pass).toString();
     }
 
-    sites[url]={html,assets};
-    localStorage.setItem('offlineSites', JSON.stringify(sites));
+    sites[url] = { html, assets };
+    localStorage.setItem("offlineSites", JSON.stringify(sites));
     refreshList();
-    alert('✅ Site saved with encrypted media!');
-  } catch(e){ alert('❌ Failed: '+e.message); }
+    alert("✅ Site saved successfully with encrypted media!");
+  } catch (e) {
+    alert("❌ Failed to save: " + e.message);
+  }
 }
 
-// View site with decrypted media
 function viewSite() {
-  const url=document.getElementById('siteSelect').value;
-  if(!url) return;
-  const pass=document.getElementById('passInput').value;
-  if(!pass) return alert("Enter passphrase");
-  const {html, assets} = sites[url];
+  const url = document.getElementById("siteSelect").value;
+  if (!url) return;
+  const pass = document.getElementById("passInput").value.trim();
+  if (!pass) return alert("Enter your passphrase to decrypt media.");
 
-  // Replace images/videos with decrypted blob URLs
-  let modifiedHtml = html.replace(/<img[^>]+src="([^">]+)"/g,(m,u)=>{
-    if(assets[u]){
-      const bytes = CryptoJS.AES.decrypt(assets[u], pass);
-      const blob = new Blob([new Uint8Array(bytes.words.map(w=>[(w>>>24)&0xFF,(w>>>16)&0xFF,(w>>>8)&0xFF,w&0xFF]).flat())]);
-      return m.replace(u, URL.createObjectURL(blob));
-    }
-    return m;
-  });
-  modifiedHtml = modifiedHtml.replace(/<video[^>]+src="([^">]+)"/g,(m,u)=>{
-    if(assets[u]){
-      const bytes = CryptoJS.AES.decrypt(assets[u], pass);
-      const blob = new Blob([new Uint8Array(bytes.words.map(w=>[(w>>>24)&0xFF,(w>>>16)&0xFF,(w>>>8)&0xFF,w&0xFF]).flat())]);
-      return m.replace(u, URL.createObjectURL(blob));
+  const { html, assets } = sites[url];
+  const viewer = document.getElementById("viewer");
+
+  let out = html.replace(/(src)="([^"]+)"/g, (m, attr, u) => {
+    const abs = new URL(u, url).href;
+    if (assets[abs]) {
+      const bytes = CryptoJS.AES.decrypt(assets[abs], pass);
+      const buf = new Uint8Array(bytes.words.flatMap(w => [(w >>> 24) & 0xFF, (w >>> 16) & 0xFF, (w >>> 8) & 0xFF, w & 0xFF]));
+      const blobUrl = URL.createObjectURL(new Blob([buf]));
+      return attr + '="' + blobUrl + '"';
     }
     return m;
   });
 
-  const blob = new Blob([modifiedHtml], {type:'text/html'});
-  document.getElementById('viewer').src = URL.createObjectURL(blob);
+  const blob = new Blob([out], { type: "text/html" });
+  viewer.src = URL.createObjectURL(blob);
 }
 
-// Download self-contained offline file
 function downloadFile() {
-  const data = JSON.stringify(sites).replace(/</g,'\\u003c');
-  const html = \`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Offline Encrypted Media Collection</title>
-<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
-<style>body{text-align:center;font-family:sans-serif;padding:20px;}iframe{width:90%;height:500px;border:1px solid #ccc;margin-top:10px;}</style>
-</head>
-<body>
-<input type="password" id="passInput" placeholder="Enter passphrase">
-<select id="siteSelect"></select>
-<iframe id="viewer"></iframe>
-<script>
-const sites=\${data};
-const select=document.getElementById('siteSelect');
-const viewer=document.getElementById('viewer');
-Object.keys(sites).forEach(u=>{ const o=document.createElement('option'); o.value=u; o.textContent=u; select.appendChild(o); });
-select.onchange=()=>{
-  const pass=document.getElementById('passInput').value;
-  if(!pass){ alert('Enter passphrase'); return; }
-  const {html, assets}=sites[select.value];
-  let modifiedHtml = html.replace(/<img[^>]+src="([^">]+)"/g,(m,u)=>{
-    if(assets[u]){
-      const bytes = CryptoJS.AES.decrypt(assets[u], pass);
-      const blob = new Blob([new Uint8Array(bytes.words.map(w=>[(w>>>24)&0xFF,(w>>>16)&0xFF,(w>>>8)&0xFF,w&0xFF]).flat())]);
-      return m.replace(u, URL.createObjectURL(blob));
-    } return m;
-  });
-  modifiedHtml = modifiedHtml.replace(/<video[^>]+src="([^">]+)"/g,(m,u)=>{
-    if(assets[u]){
-      const bytes = CryptoJS.AES.decrypt(assets[u], pass);
-      const blob = new Blob([new Uint8Array(bytes.words.map(w=>[(w>>>24)&0xFF,(w>>>16)&0xFF,(w>>>8)&0xFF,w&0xFF]).flat())]);
-      return m.replace(u, URL.createObjectURL(blob));
-    } return m;
-  });
-  const blob = new Blob([modifiedHtml],{type:'text/html'});
-  viewer.src=URL.createObjectURL(blob);
-};
-</script>
-</body></html>\`;
-  const blob = new Blob([html],{type:'text/html'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='offline-site.html';
+  const blob = new Blob([JSON.stringify(sites)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "offline-sites.json";
   a.click();
+  alert("💾 Downloaded your saved sites file!");
 }
-
-refreshList();
 </script>
 </body>
 </html>`);
 });
 
-// Backend fetch route
-app.post("/fetch", async(req,res)=>{
-  const {url}=req.body;
-  if(!url) return res.status(400).send("Missing URL");
-  try{
+// Backend routes
+app.post("/fetch", async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).send("Missing URL");
+  try {
     const r = await axios.get(url);
     res.send(r.data);
-  }catch(e){ res.status(500).send("Error fetching site: "+e.message);}
+  } catch (e) {
+    res.status(500).send("Failed to fetch site: " + e.message);
+  }
 });
 
-// Proxy route for assets (images/videos)
-app.get("/proxy", async(req,res)=>{
-  const {url} = req.query;
-  if(!url) return res.status(400).send("Missing URL");
-  try{
-    const r = await axios.get(url, {responseType:'arraybuffer'});
+app.get("/proxy", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).send("Missing URL");
+  try {
+    const r = await axios.get(url, { responseType: "arraybuffer" });
     res.send(Buffer.from(r.data));
-  }catch(e){ res.status(500).send("Failed to fetch asset");}
+  } catch (e) {
+    res.status(500).send("Failed to fetch asset.");
+  }
 });
 
-app.listen(PORT,()=>console.log("✅ Offline Saver running with encrypted media on port", PORT));
+app.listen(PORT, () => console.log("✅ Offline Saver running on port", PORT));
