@@ -1,7 +1,7 @@
 {
   "name": "offline-site-saver",
   "version": "1.0.0",
-  "description": "Offline site saver with encrypted media and single HTML download",
+  "description": "Offline site saver app with encrypted media and single HTML download",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -13,5 +13,15 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "keywords": [
+    "offline",
+    "site",
+    "saver",
+    "encrypted",
+    "html",
+    "download"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }
