@@ -1,7 +1,7 @@
 {
   "name": "offline-site-saver",
   "version": "1.0.0",
-  "description": "Save websites offline with encrypted images/videos",
+  "description": "A Render-deployable app that saves websites offline and bundles them into one encrypted HTML file.",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -14,5 +14,6 @@
   "engines": {
     "node": ">=18"
   },
-  "keywords": ["offline","website","saver","encrypted","media"]
+  "author": "Your Name",
+  "license": "MIT"
 }
